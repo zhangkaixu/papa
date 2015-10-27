@@ -2,7 +2,8 @@
 #coding:utf8
 from __future__ import print_function
 import papa
-
+import json
+import datetime
 
 class BaiduNews() :
     def gen_seeds(self):
@@ -17,7 +18,9 @@ class BaiduNews() :
             url = url.partition('#')[0]
 
             if e.text and len(e.text) > 10 and url.startswith('http://'):
-                yield ('save', url, e.text.encode('utf8'))
+                data = {'url':url.encode('utf8'), 'title':e.text.encode('utf8'), 
+                        'extract_date':str(datetime.date.today()) }
+                yield ('save', url, json.dumps(data, ensure_ascii = False))
 
 if __name__ == '__main__':
     papa.quickstart(BaiduNews(), 'baidu_news')

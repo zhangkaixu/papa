@@ -6,6 +6,7 @@ import pybloomfilter as pybf
 import requests
 import threading
 import Queue
+import json
 import time
 from lxml import etree
 from io import StringIO
@@ -61,6 +62,7 @@ def quickstart(rule, data_dir = '.'):
 
 class Scheduler :
     def __init__(self, data_dir, rule):
+        self.data_dir = data_dir
         self.rule = rule
         os.system('mkdir -p ' + data_dir)
 
@@ -77,14 +79,25 @@ class Scheduler :
         saved_filter = pybf.BloomFilter(
                 pybf.BloomFilter.ReadFile if os.path.exists(saved_ff) else 10000000, 
                 0.0001, saved_ff)
+
         
         self.dyn_filter = set()
         self.queue = Queue.LifoQueue()
+        if os.path.exists(os.path.join(self.data_dir, 'queue.json')):
+            for item in reversed([json.loads(line) for line in open(os.path.join(self.data_dir,
+                'queue.json'))]):
+                self.queue.put(item)
+            os.remove(os.path.join(self.data_dir, 'queue.json'))
         self.saved_filter = saved_filter
         self.parsed_filter = parsed_filter
         self.savefile = savefile
 
     def __del__(self):
+        f = open(os.path.join(self.data_dir, 'queue.json'), 'w')
+        while not self.queue.empty():
+            s = json.dumps(self.queue.get()).encode('utf8')
+            print(s, file =f)
+        f.close()
         print('bye~')
     
     def run(self):
@@ -114,6 +127,7 @@ class Scheduler :
                 self.dyn_filter.clear()
                 continue
             try :
+                if item[0] in self.parsed_filter : continue
                 print('queuesize', self.queue.qsize(), 'fetching', *item)
 
                 if item[1] >= 0 :
@@ -135,7 +149,7 @@ class Scheduler :
     def fetch(self, url):
         p = etree.HTMLParser()
         try:
-            cont = requests.get(url).content
+            cont = requests.get(url, timeout = 3).content
         except Exception, e:
             return 
         for codec in ['utf8', 'gb18030'] :
@@ -147,7 +161,10 @@ class Scheduler :
         else :
             return
 
-        tree = etree.parse(StringIO(content), p)
+        try :
+            tree = etree.parse(StringIO(content), p)
+        except :
+            return
         return url, content, tree
 
     def deal_cmd(self, poped, cmd):
@@ -179,12 +196,14 @@ class Scheduler :
             if url not in self.dyn_filter and c_deg >= 0 :
                 self.dyn_filter.add(url)
                 print('push dynamic', url, c_deg)
-                self.queue.put((url, c_deg))
+                if self.queue.qsize() < 100000 :
+                    self.queue.put((url, c_deg))
             return
 
         if action == 'static' :
             if url not in self.parsed_filter and url not in self.dyn_filter and c_deg >= 0 :
-                self.queue.put((url, c_deg))
+                if self.queue.qsize() < 100000 :
+                    self.queue.put((url, c_deg))
             return
 
 #if __name__ == '__main__':

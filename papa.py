@@ -129,7 +129,6 @@ class Scheduler :
             try :
                 if item[0] in self.parsed_filter : continue
                 print('queuesize', self.queue.qsize(), 'fetching', *item)
-
                 if item[1] >= 0 :
                     res = self.fetch(item[0])
                     if res != None :
@@ -149,7 +148,10 @@ class Scheduler :
     def fetch(self, url):
         p = etree.HTMLParser()
         try:
-            cont = requests.get(url, timeout = 3).content
+            timeout = 3
+            if hasattr(self.rule, 'fetch_timeout'):
+                timeout = self.rule.fetch_timeout
+            cont = requests.get(url, timeout = timeout).content
         except Exception, e:
             return 
         for codec in ['utf8', 'gb18030'] :
@@ -184,7 +186,17 @@ class Scheduler :
         ### save url
         if action == 'save' :
             if not self.saved_filter.add(url):
-                print(*cmd[1:], sep = '\t', file = self.savefile)
+
+                #print(*cmd[1:], sep = '\t')
+                cache = []
+                for x in cmd[1:]:
+                    if type(x) != str :
+                        cache.append(x.encode('utf8'))
+                    else:
+                        cache.append(x)
+
+
+                print(*cache, sep = '\t', file = self.savefile)
                 print('save', url)
             return
 
